@@ -2,12 +2,13 @@ import os
 import argparse
 
 import numpy as np
-
+import time
 import tvm
 from tvm import relay, auto_scheduler
-import tvm.contrib.graph_runtime as runtime
-
+import tvm.contrib.graph_executor as runtime
+#from tvm.contrib.debugger import debug_executor as runtime
 from utils import get_network, make_network_key
+from tvm.runtime.vm import VirtualMachine
 
 def benchmark(network, batch_size, dtype, target, log_file, repeat):
     layout = "NHWC"
@@ -24,10 +25,12 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
             with tvm.transform.PassContext(
                 opt_level=3, config={"relay.backend.use_auto_scheduler": True}
             ):
-                lib = relay.build(mod, target=target, params=params)
+                json, lib, params = relay.build(mod, target=target, params=params)
+                #lib = relay.build(mod, target=target, params=params)
 
-        ctx = tvm.context(str(target), 0)
-        module = runtime.GraphModule(lib["default"](ctx))
+        ctx = tvm.device(str(target), 0)
+        #module = runtime.GraphModule(lib["default"](ctx))
+        module = runtime.create(json, lib, ctx)
 
         # Feed input data
         seq_length = input_shape[0][1]
@@ -41,17 +44,36 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
             with tvm.transform.PassContext(
                 opt_level=3, config={"relay.backend.use_auto_scheduler": True}
             ):
-                lib = relay.build(mod, target=target, params=params)
-        ctx = tvm.context(str(target), 0)
-        module = runtime.GraphModule(lib["default"](ctx))
-
+                json, lib, params = relay.build(mod, target=target, params=params)#error occurs
+                #lib = relay.build(mod, target=target, params=params)
+        ctx = tvm.device(str(target), 0)
+        #module = runtime.GraphModule(lib["default"](ctx))
+        module = runtime.create(json, lib, ctx)#, dump_root="0823_debug_log.txt")
         # Feed input data
         data = np.random.uniform(size=input_shape)
         module.set_input(input_name, data)
-
+        module.set_input(**params)
+        #print(module.profile())
+        #module.run()
+        #exe =  relay.vm.compile(mod, target="llvm", params=params)
+        #vm = VirtualMachine(exe, ctx)
+        #input_list = [tvm.nd.array(data.astype("float32"))]
+        #results = vm.invoke("main", input_list)
+        
+        for i in range(120):
+            if i == 20:
+                tic = time.time()
+            out = module.run()
+            #vm.invoke("main", input_list)
+            #print(module.profile())
+            #out.wait_to_read()
+        with_fuse_fps = 100 * batch_size / (time.time() - tic)
+        print("{}: with_fuse_ms: {:.4f} s".format(network, with_fuse_fps))
+        
     # Evaluate
-    ftimer = module.module.time_evaluator("run", ctx, min_repeat_ms=500, repeat=repeat)
-    return np.array(ftimer().results)
+    #ftimer = module.module.time_evaluator("run", ctx, repeat=3)
+    #print(ftimer().results)
+    #return np.array(ftimer().results)
 
 
 if __name__ == "__main__":
@@ -59,8 +81,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
-        default="all",
+        choices=["resnet_50", "mobilenet_v2", "bert", "resnet_v1_torch", "inception_v3_torch", "faster_rcnn_torch",\
+             "mask_rcnn_torch", "all"],
+        default="resnet_50",
         help="The name of the neural network.",
     )
     parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
@@ -72,13 +95,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs/", help="Log file directory."
-    )
+        "--logdir", type=str, default="/home2/tvm/TLCBench/experiment_res/", help="Log file directory."
+    )#experiment_res/mxnet_resnet50_v1_bs128
+    #saved_logs/2020_01_11
     parser.add_argument("--repeat", type=int, default=3)
     args = parser.parse_args()
 
     if args.network == "all":
-        networks = ["resnet_50", "mobilenet_v2", "bert"]
+        networks = ["resnet_v1_torch", "inception_v3_torch"]
     else:
         networks = [args.network]
     batch_sizes = [args.batch_size]
@@ -100,7 +124,7 @@ if __name__ == "__main__":
                 prof_res = benchmark(
                     network, batch_size, dtype, target, log_file, args.repeat
                 )
-
+    ''' 
                 prof_res *= 1000  # convert to millisecond
                 message = "%-18s %-12s %-19s (%s)" % (
                     network,
@@ -120,3 +144,4 @@ if __name__ == "__main__":
     for line in result_messages:
         print(line)
     print("-------------------------------------------------------------")
+    ''' 

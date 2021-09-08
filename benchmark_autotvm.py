@@ -63,10 +63,10 @@ if __name__ == "__main__":
         "--network",
         type=str,
         choices=["resnet_50", "mobilenet_v2", "bert", "all"],
-        default="all",
+        default="resnet_50",
         help="The name of the neural network.",
     )
-    parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
+    parser.add_argument("--batch-size", type=int, default=64, help="The batch size")
     parser.add_argument(
         "--target",
         type=str,
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs/", help="Log file directory."
+        "--logdir", type=str, default="tmp_logs_bs64_0506", help="Log file directory."
     )
     parser.add_argument("--repeat", type=int, default=3)
     args = parser.parse_args()

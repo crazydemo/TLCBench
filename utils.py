@@ -10,7 +10,189 @@ def get_network(name, batch_size, dtype, layout):
     input_shape = (batch_size, 3, 224, 224)
     output_shape = (batch_size, 1000)
 
-    if "resnet" in name:
+    if "torch" in name:
+        if "resnet" in name:
+            import torch
+            import torchvision.models as models
+
+            model = models.resnet50(pretrained=True)
+            model = model.eval()
+
+            # We grab the TorchScripted model via tracing
+            input_shape = [batch_size, 3, 224, 224]
+            input_data = torch.randn(input_shape)
+            scripted_model = torch.jit.trace(model, input_data).eval()
+
+            input_name = "input0"
+            shape_list = [(input_name, input_shape)]
+            mod, params = relay.frontend.from_pytorch(scripted_model, shape_list)
+
+            if layout == "NHWC":
+                mod = convert_to_nhwc(mod)
+            else:
+                assert layout == "NCHW"
+
+        elif "inception_v3" in name:
+            import torch
+            import torchvision.models as models
+
+            model = models.inception_v3(pretrained=True)
+            model = model.eval()
+
+            # We grab the TorchScripted model via tracing
+            input_shape = [1, 3, 299, 299]
+            input_data = torch.randn(input_shape)
+            scripted_model = torch.jit.trace(model, input_data).eval()
+
+            input_name = "input0"
+            shape_list = [(input_name, input_shape)]
+            mod, params = relay.frontend.from_pytorch(scripted_model, shape_list)
+
+            if layout == "NHWC":
+                mod = convert_to_nhwc(mod)
+            else:
+                assert layout == "NCHW"
+
+        elif "faster_rcnn" in name:
+            import torch
+            import torchvision
+            from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+
+            # load a model pre-trained pre-trained on COCO
+            model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+            model = model.eval()
+            x = [torch.rand(3, 800, 800)]
+            predictions = model(x)
+
+            # We grab the TorchScripted model via tracing
+            input_shape = [1, 3, 800, 800]
+            input_data = torch.randn(input_shape)
+            scripted_model = torch.jit.trace(model, input_data).eval()
+
+            input_name = "input0"
+            shape_list = [(input_name, input_shape)]
+            mod, params = relay.frontend.from_pytorch(scripted_model, shape_list)
+            # import numpy as np
+            # in_size = 800
+
+            # input_shape = (1, 3, in_size, in_size)
+
+
+            # def do_trace(model, inp):
+            #     model_trace = torch.jit.trace(model, inp)
+            #     model_trace.eval()
+            #     return model_trace
+
+
+            # def dict_to_tuple(out_dict):
+            #     if "masks" in out_dict.keys():
+            #         return out_dict["boxes"], out_dict["scores"], out_dict["labels"], out_dict["masks"]
+            #     return out_dict["boxes"], out_dict["scores"], out_dict["labels"]
+
+
+            # class TraceWrapper(torch.nn.Module):
+            #     def __init__(self, model):
+            #         super().__init__()
+            #         self.model = model
+
+            #     def forward(self, inp):
+            #         out = self.model(inp)
+            #         return dict_to_tuple(out[0])
+
+
+            # model_func = torchvision.models.detection.fasterrcnn_resnet50_fpn
+            # model = TraceWrapper(model_func(pretrained=True))
+
+            # model.eval()
+            # inp = torch.Tensor(np.random.uniform(0.0, 250.0, size=(1, 3, in_size, in_size)))
+
+            # with torch.no_grad():
+            #     # out = model(inp)
+            #     script_module = do_trace(model, inp)
+            
+            
+            # input_name = "input0"
+            # shape_list = [(input_name, input_shape)]
+            # mod, params = relay.frontend.from_pytorch(script_module, shape_list)
+
+            if layout == "NHWC":
+                mod = convert_to_nhwc(mod)
+            else:
+                assert layout == "NCHW"
+        
+        elif "mask_rcnn" in name:
+            import torch
+            import torchvision
+            import numpy as np
+            from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+
+            model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
+            model = model.eval()
+            x = [torch.rand(3, 800, 800)]
+            predictions = model(x)
+
+            # We grab the TorchScripted model via tracing
+            input_shape = [1, 3, 800, 800]
+            input_data = torch.randn(input_shape)
+            scripted_model = torch.jit.trace(model, input_data).eval()
+
+            input_name = "input0"
+            shape_list = [(input_name, input_shape)]
+            mod, params = relay.frontend.from_pytorch(scripted_model, shape_list)
+
+            # in_size = 800
+
+            # input_shape = (1, 3, in_size, in_size)
+
+
+            # def do_trace(model, inp):
+            #     model_trace = torch.jit.trace(model, inp)
+            #     model_trace.eval()
+            #     return model_trace
+
+
+            # def dict_to_tuple(out_dict):
+            #     if "masks" in out_dict.keys():
+            #         return out_dict["boxes"], out_dict["scores"], out_dict["labels"], out_dict["masks"]
+            #     return out_dict["boxes"], out_dict["scores"], out_dict["labels"]
+
+
+            # class TraceWrapper(torch.nn.Module):
+            #     def __init__(self, model):
+            #         super().__init__()
+            #         self.model = model
+
+            #     def forward(self, inp):
+            #         out = self.model(inp)
+            #         return dict_to_tuple(out[0])
+
+
+            # model_func = torchvision.models.detection.maskrcnn_resnet50_fpn
+            # model = TraceWrapper(model_func(pretrained=True))
+
+            # model.eval()
+            # inp = torch.Tensor(np.random.uniform(0.0, 250.0, size=(1, 3, in_size, in_size)))
+
+            # with torch.no_grad():
+            #     out = model(inp)
+            #     script_module = do_trace(model, inp)
+            
+            
+            # input_name = "input0"
+            # shape_list = [(input_name, input_shape)]
+            # mod, params = relay.frontend.from_pytorch(script_module, shape_list)
+
+            # target = "llvm"
+
+            # with tvm.transform.PassContext(opt_level=3, disabled_pass=["FoldScaleAxis"]):
+            #     vm_exec = relay.vm.compile(mod, target=target, params=params)
+
+            if layout == "NHWC":
+                mod = convert_to_nhwc(mod)
+            else:
+                assert layout == "NCHW"
+
+    elif "resnet" in name:
         import mxnet
 
         n_layer = int(name.split("_")[1])
@@ -22,6 +204,7 @@ def get_network(name, batch_size, dtype, layout):
             mod = convert_to_nhwc(mod)
         else:
             assert layout == "NCHW"
+
     elif name == "mobilenet_v2":
         import mxnet
 
@@ -39,10 +222,10 @@ def get_network(name, batch_size, dtype, layout):
     elif name == "bert":
         import gluonnlp
 
-        seq_length = 128
+        seq_length = 384
 
         # Instantiate a BERT classifier using GluonNLP
-        model_name = "bert_12_768_12"
+        model_name = "bert_24_1024_16"
         dataset = "book_corpus_wiki_en_uncased"
         model, _ = gluonnlp.model.get_model(
             name=model_name,

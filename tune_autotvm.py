@@ -7,7 +7,7 @@ from tvm.autotvm.tuner import XGBTuner, GATuner, RandomTuner, GridSearchTuner
 from tvm.autotvm.graph_tuner import DPTuner, PBQPTuner
 
 from utils import get_network, make_network_key, use_graph_tuner
-
+import datetime
 
 def autotvm_tune(network, batch_size, dtype, target, log_prefix):
     kernel_log = log_prefix + ".kernel.log"
@@ -139,12 +139,15 @@ def tune_graph(
 
 
 if __name__ == "__main__":
+    time_lst = []
+    start = datetime.datetime.now()
+    print(start)
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
-        default="all",
+        choices=["resnet_50", "mobilenet_v2", "bert", "mask_rcnn_torch", "all"],
+        default="mask_rcnn_torch",
         help="The name of the neural network.",
     )
     parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
@@ -156,7 +159,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs/", help="Log file directory."
+        "--logdir", type=str, default="experiment_res/", help="Log file directory."
     )
     args = parser.parse_args()
 
@@ -179,3 +182,9 @@ if __name__ == "__main__":
                     args.logdir, "autotvm", target.model, network_key
                 )
                 autotvm_tune(network, batch_size, dtype, target, log_prefix)
+
+        end = datetime.datetime.now()
+        print(end)
+        time_lst.append(end-start)
+        start = datetime.datetime.now()
+    print(time_lst)

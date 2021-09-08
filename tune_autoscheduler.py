@@ -1,3 +1,4 @@
+from datetime import time
 import os
 import argparse
 
@@ -8,9 +9,13 @@ from utils import get_network, make_network_key
 
 network_to_n_trials = {
     # CPU
-    ("resnet_50", 1, "float32", "llvm"): 22000,
+    ("resnet_50", 128, "float32", "llvm"): 22000,
+    ("resnet_v1_torch", 1, "float32", "llvm"): 22000,
+    ("inception_v3_torch", 1, "float32", "llvm"): 44000,##task 54
+    ("faster_rcnn_torch", 1, "float32", "llvm"): 44000,## task 51
+    ("mask_rcnn_torch", 1, "float32", "llvm"): 44000,##54
     ("mobilenet_v2", 1, "float32", "llvm"): 16000,
-    ("bert", 1, "float32", "llvm"): 12000,
+    ("bert", 64, "float32", "llvm"): 12000,
     # GPU
     ("resnet_50", 1, "float32", "cuda"): 20000,
     ("mobilenet_v2", 1, "float32", "cuda"): 16000,
@@ -23,7 +28,10 @@ def auto_scheduler_tune(network, batch_size, dtype, target, log_file):
     if os.path.exists(log_file):
         os.remove(log_file)
 
-    layout = "NHWC"
+    if "mask_rcnn" in network:
+        layout = "NCHW"
+    else:
+        layout = "NHWC"
     mod, params, input_name, input_shape, output_shape = get_network(
         network, batch_size, dtype, layout
     )
@@ -64,25 +72,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
-        default="all",
+        choices=["resnet_50", "mobilenet_v2", "bert", "resnet_v1_torch", "inception_v3_torch", "faster_rcnn_torch",\
+             "mask_rcnn_torch", "all"],
+        default="resnet_50",
         help="The name of the neural network.",
     )
-    parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
+    parser.add_argument("--batch-size", type=int, default=128, help="The batch size")
     parser.add_argument(
         "--target",
         type=str,
-        default="llvm -model=platinum-8124m -mcpu=skylake-avx512",
+        default="llvm -model=platinum-8124m -mcpu=skylake-avx512",#llvm -model=platinum-8124m -mcpu=skylake-avx512
         help="The compilation target.",
     )
     parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs/", help="Log file directory."
+        "--logdir", type=str, default="experiment_res/mxnet_resnet50_v1_bs128_28core", help="Log file directory."
     )
     args = parser.parse_args()
 
     if args.network == "all":
-        networks = ["resnet_50", "mobilenet_v2", "bert"]
+        networks = ["faster_rcnn_torch", "mask_rcnn_torch"]
     else:
         networks = [args.network]
     batch_sizes = [args.batch_size]
@@ -90,7 +99,11 @@ if __name__ == "__main__":
 
     target = tvm.target.Target(args.target)
 
+    import datetime
+    time_lst = []
     for network in networks:
+        start = datetime.datetime.now()
+        print(start)
         for batch_size in batch_sizes:
             for dtype in dtypes:
                 network_key = make_network_key(network, batch_size, dtype)
@@ -101,3 +114,8 @@ if __name__ == "__main__":
                 )
 
                 auto_scheduler_tune(network, batch_size, dtype, target, log_file)
+        end = datetime.datetime.now()
+        print(end)
+        print(end-start)
+        time_lst.append(end-start)
+    print(time_lst)
