@@ -11,7 +11,7 @@ Benchmark scripts for TVM
 ## Requirement
 Tested with  
 TVM commit id: dfe4cebbdadab3d4e6e6ba3951276a51a4ffeaf6 (May. 14, 2021)  
-mxnet==1.8.0.post0
+mxnet==1.8.0.post0  
 gluonnlp==0.10.0  
 
 ### Benchmark
