@@ -6,7 +6,7 @@ import time
 
 import tvm
 from tvm import relay, auto_scheduler
-import tvm.contrib.graph_executor as runtime
+from tvm.contrib.debugger import debug_executor as runtime
 
 from utils import get_network, make_network_key
 
@@ -45,21 +45,16 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
                 graph, mod, params = relay.build(mod, target, params=params)
         ctx = tvm.device(str(target), 0)
         module = runtime.create(graph, mod, ctx)
+
         # Feed input data
         data = np.random.uniform(size=input_shape)
         module.set_input(input_name, data, **params)
-
-        for i in range(repeat+20):
-            if i == 20:
-                tic = time.time()
-            out = module.run()
-        with_fuse_fps = repeat * batch_size / (time.time() - tic)
-        print("{}: with_fuse_fps: {:.4f} fps".format(network, with_fuse_fps))
-
+        
     # Evaluate
-    for i in range(100):
+    for i in range(20):
         module.run()
     ftimer = module.module.time_evaluator("run", ctx, repeat=repeat)
+    print(module.profile())
     
     return np.array(ftimer().results)
 
@@ -69,7 +64,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "ResNet50_v1b", "InceptionV3", "VGG11_bn", "mobilenet_v2", "bert", "DenseNet121", "all"],
+        choices=["resnet_50", "ResNet50_v1b", "mobilenet_v2", "bert", "all"],
         default="all",
         help="The name of the neural network.",
     )

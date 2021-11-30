@@ -22,6 +22,50 @@ def get_network(name, batch_size, dtype, layout):
             mod = convert_to_nhwc(mod)
         else:
             assert layout == "NCHW"
+    elif name == "ResNet50_v1b":
+        import gluoncv
+        block = gluoncv.model_zoo.get_model("ResNet50_v1b", pretrained=True)
+        mod, params = relay.frontend.from_mxnet(
+            block, shape={"data": input_shape}, dtype=dtype
+        )
+        if layout == "NHWC":
+           mod = convert_to_nhwc(mod)
+        else:
+           assert layout == "NCHW"
+    elif name == "InceptionV3":
+        import gluoncv
+        input_shape = (batch_size, 3, 300, 300)
+        block = gluoncv.model_zoo.get_model("InceptionV3", pretrained=True)
+        mod, params = relay.frontend.from_mxnet(
+            block, shape={"data": input_shape}, dtype=dtype
+        )
+
+        if layout == "NHWC":
+            mod = convert_to_nhwc(mod)
+        else:
+            assert layout == "NCHW"
+    elif name == "VGG11_bn":
+        import gluoncv
+        block = gluoncv.model_zoo.get_model("VGG11_bn", pretrained=True)
+        mod, params = relay.frontend.from_mxnet(
+            block, shape={"data": input_shape}, dtype=dtype
+        )
+        if layout == "NHWC":
+            mod = convert_to_nhwc(mod)
+        else:
+            assert layout == "NCHW"
+    elif name == "DenseNet121":
+        import gluoncv
+        block = gluoncv.model_zoo.get_model("DenseNet121", pretrained=True)
+        mod, params = relay.frontend.from_mxnet(
+            block, shape={"data": input_shape}, dtype=dtype
+        )
+        if layout == "NHWC":
+            mod = convert_to_nhwc(mod)
+        else:
+            assert layout == "NCHW"
+
+
     elif name == "mobilenet_v2":
         import mxnet
 

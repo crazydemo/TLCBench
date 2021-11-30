@@ -9,6 +9,15 @@ from utils import get_network, make_network_key
 network_to_n_trials = {
     # CPU
     ("resnet_50", 1, "float32", "llvm"): 22000,
+    ("resnet_50", 128, "float32", "llvm"): 22000,
+    ("ResNet50_v1b", 1, "float32", "llvm"): 22000,
+    ("ResNet50_v1b", 32, "float32", "llvm"): 22000,
+    ("InceptionV3", 1, "float32", "llvm"): 44000,
+    ("InceptionV3", 32, "float32", "llvm"): 44000,
+    ("VGG11_bn", 1, "float32", "llvm"): 12000,
+    ("VGG11_bn", 32, "float32", "llvm"): 12000,
+    ("DenseNet121", 1, "float32", "llvm"): 58000,
+    ("DenseNet121", 32, "float32", "llvm"): 58000,
     ("mobilenet_v2", 1, "float32", "llvm"): 16000,
     ("bert", 1, "float32", "llvm"): 12000,
     # GPU
@@ -27,13 +36,13 @@ def auto_scheduler_tune(network, batch_size, dtype, target, log_file):
     mod, params, input_name, input_shape, output_shape = get_network(
         network, batch_size, dtype, layout
     )
-
+    # print(mod)
     n_trials = network_to_n_trials[(network, batch_size, dtype, str(target.kind))]
 
     if "cpu" in target.keys:
         tuning_opt = auto_scheduler.TuningOptions(
             num_measure_trials=n_trials,
-            runner=auto_scheduler.LocalRunner(repeat=10, enable_cpu_cache_flush=True),
+            runner=auto_scheduler.LocalRunner(timeout=10*batch_size, repeat=10, enable_cpu_cache_flush=True),
             measure_callbacks=[auto_scheduler.RecordToFile(log_file)],
         )
     else:
@@ -64,7 +73,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
+        choices=["resnet_50", "ResNet50_v1b", "InceptionV3", "VGG11_bn", "mobilenet_v2", "bert", "DenseNet121", "all"],
         default="all",
         help="The name of the neural network.",
     )
@@ -82,7 +91,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.network == "all":
-        networks = ["resnet_50", "mobilenet_v2", "bert"]
+        networks = ["resnet_50", "ResNet50_v1b", "mobilenet_v2", "bert"]
     else:
         networks = [args.network]
     batch_sizes = [args.batch_size]

@@ -62,7 +62,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
+        choices=["resnet_50", "ResNet50_v1b", "mobilenet_v2", "bert", "all"],
         default="all",
         help="The name of the neural network.",
     )
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.network == "all":
-        networks = ["resnet_50", "mobilenet_v2", "bert"]
+        networks = ["resnet_50", "ResNet50_v1b", "mobilenet_v2", "bert"]
     else:
         networks = [args.network]
     batch_sizes = [args.batch_size]
