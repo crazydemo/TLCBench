@@ -20,6 +20,8 @@ network_to_n_trials = {
     ("DenseNet121", 32, "float32", "llvm"): 58000,
     ("mobilenet_v2", 1, "float32", "llvm"): 16000,
     ("bert", 1, "float32", "llvm"): 12000,
+    ("faster_rcnn_torch", 1, "float32", "llvm"): 44000,## task 51
+    ("mask_rcnn_torch", 1, "float32", "llvm"): 44000,##54
     # GPU
     ("resnet_50", 1, "float32", "cuda"): 20000,
     ("mobilenet_v2", 1, "float32", "cuda"): 16000,
@@ -32,10 +34,14 @@ def auto_scheduler_tune(network, batch_size, dtype, target, log_file):
     if os.path.exists(log_file):
         os.remove(log_file)
 
-    layout = "NHWC"
+    if "mask_rcnn" in network:
+        layout = "NCHW"
+    else:
+        layout = "NHWC"
     mod, params, input_name, input_shape, output_shape = get_network(
         network, batch_size, dtype, layout
     )
+
     # print(mod)
     n_trials = network_to_n_trials[(network, batch_size, dtype, str(target.kind))]
 
@@ -73,7 +79,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "ResNet50_v1b", "InceptionV3", "VGG11_bn", "mobilenet_v2", "bert", "DenseNet121", "all"],
+        choices=["resnet_50", "ResNet50_v1b", "InceptionV3", "VGG11_bn", "mobilenet_v2", "bert", "DenseNet121", "faster_rcnn_torch",\
+                 "mask_rcnn_torch", "all"],
         default="all",
         help="The name of the neural network.",
     )

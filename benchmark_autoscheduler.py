@@ -69,7 +69,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "ResNet50_v1b", "InceptionV3", "VGG11_bn", "mobilenet_v2", "bert", "DenseNet121", "all"],
+        choices=["resnet_50", "ResNet50_v1b", "InceptionV3", "VGG11_bn", "mobilenet_v2", "bert", "DenseNet121", "faster_rcnn_torch",\
+             "mask_rcnn_torch", "all"],
         default="all",
         help="The name of the neural network.",
     )
