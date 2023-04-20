@@ -15,6 +15,10 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
         network, batch_size, dtype, layout
     )
 
+    if dtype == "int8":
+        with relay.quantize.qconfig(calibrate_mode="global_scale", global_scale=8.0):
+            mod = relay.quantize.quantize(mod, params)
+
     assert os.path.exists(log_file), "The log file '%s' does not exist." % log_file
     print("Use log file %s" % log_file)
 
@@ -24,16 +28,20 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
             with tvm.transform.PassContext(
                 opt_level=3, config={"relay.backend.use_auto_scheduler": True}
             ):
-                lib = relay.build(mod, target=target, params=params)
+                lib = tvm.relay.build(mod, target=target, params=params)
 
-        ctx = tvm.context(str(target), 0)
-        module = runtime.GraphModule(lib["default"](ctx))
+        ctx = tvm.device(str(target), 0)
+        module = tvm.contrib.graph_executor.GraphModule(lib["default"](ctx))
 
         # Feed input data
         seq_length = input_shape[0][1]
         data = np.random.uniform(size=input_shape[0])
         token_types = np.random.uniform(size=input_shape[1])
         valid_length = np.array([seq_length] * batch_size)
+        if dtype == "bf16":
+            data = np.left_shift(data.astype("uint32"), 16).view("<f4")
+            token_types = np.left_shift(token_types.astype("uint32"), 16).view("<f4")
+            valid_length = np.left_shift(valid_length.astype("uint32"), 16).view("<f4")
         module.set_input(data0=data, data1=token_types, data2=valid_length)
     else:
         # Build module
@@ -41,17 +49,18 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
             with tvm.transform.PassContext(
                 opt_level=3, config={"relay.backend.use_auto_scheduler": True}
             ):
-                lib = relay.build(mod, target=target, params=params)
-        ctx = tvm.context(str(target), 0)
-        module = runtime.GraphModule(lib["default"](ctx))
+                lib = tvm.relay.build(mod, target=target, params=params)
 
+        ctx = tvm.device(str(target), 0)
+        module = tvm.contrib.graph_executor.GraphModule(lib["default"](ctx))
         # Feed input data
         data = np.random.uniform(size=input_shape)
         module.set_input(input_name, data)
 
     # Evaluate
-    ftimer = module.module.time_evaluator("run", ctx, min_repeat_ms=500, repeat=repeat)
+    ftimer = module.module.time_evaluator("run", ctx, min_repeat_ms=3000, repeat=repeat)
     return np.array(ftimer().results)
+
 
 
 if __name__ == "__main__":
@@ -59,20 +68,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
-        default="all",
+        choices=["resnet_50", "mobilenet_v2", "bert", "MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4", "all"],
+        default="MLP1",
         help="The name of the neural network.",
     )
     parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
     parser.add_argument(
         "--target",
         type=str,
-        default="llvm -model=platinum-8124m -mcpu=skylake-avx512",
+        default="llvm -model=platinum-8480+ -mcpu=sapphirerapids",
         help="The compilation target.",
     )
     parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs/", help="Log file directory."
+        "--logdir", type=str, default="tmp_logs_layers/", help="Log file directory."
     )
     parser.add_argument("--repeat", type=int, default=3)
     args = parser.parse_args()
@@ -81,7 +90,7 @@ if __name__ == "__main__":
         networks = ["resnet_50", "mobilenet_v2", "bert"]
     else:
         networks = [args.network]
-    batch_sizes = [args.batch_size]
+    batch_sizes = [32, 64, 128, 256, 512]
     dtypes = [args.dtype]
 
     target = tvm.target.Target(args.target)
@@ -89,6 +98,8 @@ if __name__ == "__main__":
     # Benchmark
     result_messages = []
     for network in networks:
+        if "MHA" in network and batch_size in [256, 512]:
+            continue
         for batch_size in batch_sizes:
             for dtype in dtypes:
                 network_key = make_network_key(network, batch_size, dtype)

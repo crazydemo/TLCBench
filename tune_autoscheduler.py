@@ -9,8 +9,56 @@ from utils import get_network, make_network_key
 network_to_n_trials = {
     # CPU
     ("resnet_50", 1, "float32", "llvm"): 22000,
+    ("resnet_50", 1, "bf16", "llvm"): 22000,
     ("mobilenet_v2", 1, "float32", "llvm"): 16000,
     ("bert", 1, "float32", "llvm"): 12000,
+    ("bert", 1, "bf16", "llvm"): 12000,
+    ("MLP1", 32, "float32", "llvm"): 2400,
+    ("MLP1", 64, "float32", "llvm"): 2400,
+    ("MLP1", 128, "float32", "llvm"): 2400,
+    ("MLP1", 256, "float32", "llvm"): 2400,
+    ("MLP1", 512, "float32", "llvm"): 2400,
+    ("MLP2", 32, "float32", "llvm"): 4000,
+    ("MLP2", 64, "float32", "llvm"): 4000,
+    ("MLP2", 128, "float32", "llvm"): 4000,
+    ("MLP2", 256, "float32", "llvm"): 4000,
+    ("MLP2", 512, "float32", "llvm"): 4000,
+    ("MHA1", 32, "float32", "llvm"): 2400,
+    ("MHA1", 64, "float32", "llvm"): 2400,
+    ("MHA1", 128, "float32", "llvm"): 2400,
+    ("MHA2", 32, "float32", "llvm"): 2400,
+    ("MHA2", 64, "float32", "llvm"): 2400,
+    ("MHA2", 128, "float32", "llvm"): 2400,
+    ("MHA3", 32, "float32", "llvm"): 2400,
+    ("MHA3", 64, "float32", "llvm"): 2400,
+    ("MHA3", 128, "float32", "llvm"): 2400,
+    ("MHA4", 32, "float32", "llvm"): 2400,
+    ("MHA4", 64, "float32", "llvm"): 2400,
+    ("MHA4", 128, "float32", "llvm"): 2400,
+
+    ("MLP1", 32, "int8", "llvm"): 2400,
+    ("MLP1", 64, "int8", "llvm"): 2400,
+    ("MLP1", 128, "int8", "llvm"): 2400,
+    ("MLP1", 256, "int8", "llvm"): 2400,
+    ("MLP1", 512, "int8", "llvm"): 2400,
+    ("MLP2", 32, "int8", "llvm"): 4000,
+    ("MLP2", 64, "int8", "llvm"): 4000,
+    ("MLP2", 128, "int8", "llvm"): 4000,
+    ("MLP2", 256, "int8", "llvm"): 4000,
+    ("MLP2", 512, "int8", "llvm"): 4000,
+    ("MHA1", 32, "int8", "llvm"): 2400,
+    ("MHA1", 64, "int8", "llvm"): 2400,
+    ("MHA1", 128, "int8", "llvm"): 2400,
+    ("MHA2", 32, "int8", "llvm"): 2400,
+    ("MHA2", 64, "int8", "llvm"): 2400,
+    ("MHA2", 128, "int8", "llvm"): 2400,
+    ("MHA3", 32, "int8", "llvm"): 2400,
+    ("MHA3", 64, "int8", "llvm"): 2400,
+    ("MHA3", 128, "int8", "llvm"): 2400,
+    ("MHA4", 32, "int8", "llvm"): 2400,
+    ("MHA4", 64, "int8", "llvm"): 2400,
+    ("MHA4", 128, "int8", "llvm"): 2400,
+
     # GPU
     ("resnet_50", 1, "float32", "cuda"): 20000,
     ("mobilenet_v2", 1, "float32", "cuda"): 16000,
@@ -27,6 +75,9 @@ def auto_scheduler_tune(network, batch_size, dtype, target, log_file):
     mod, params, input_name, input_shape, output_shape = get_network(
         network, batch_size, dtype, layout
     )
+
+    if dtype=="bf16":
+        mod = relay.transform.ToMixedPrecision("bfloat16")(mod)
 
     n_trials = network_to_n_trials[(network, batch_size, dtype, str(target.kind))]
 
@@ -64,34 +115,36 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "all"],
-        default="all",
+        choices=["resnet_50", "mobilenet_v2", "bert", "MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4", "all"],
+        default="MLP1",
         help="The name of the neural network.",
     )
-    parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
+    parser.add_argument("--batch-size", type=int, default=32, help="The batch size")
     parser.add_argument(
         "--target",
         type=str,
-        default="llvm -model=platinum-8124m -mcpu=skylake-avx512",
+        default="llvm -model=platinum-8480+ -mcpu=sapphirerapids",#"llvm -model=platinum-8124m -mcpu=skylake-avx512",
         help="The compilation target.",
     )
-    parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
+    parser.add_argument("--dtype", type=str, default="int8", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs/", help="Log file directory."
+        "--logdir", type=str, default="tmp_logs_layers/", help="Log file directory."
     )
     args = parser.parse_args()
 
     if args.network == "all":
-        networks = ["resnet_50", "mobilenet_v2", "bert"]
+        networks = ["MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4"]
     else:
         networks = [args.network]
-    batch_sizes = [args.batch_size]
+    batch_sizes = [32, 64, 128, 256, 512]
     dtypes = [args.dtype]
 
     target = tvm.target.Target(args.target)
 
     for network in networks:
         for batch_size in batch_sizes:
+            if "MHA" in network and batch_size in [256, 512]:
+                continue
             for dtype in dtypes:
                 network_key = make_network_key(network, batch_size, dtype)
                 print("Tune %s ..." % network_key)
