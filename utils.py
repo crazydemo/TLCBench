@@ -2,8 +2,8 @@ import os
 
 import tvm
 from tvm import relay
-x_scale = y_scale = z_scale = 0.00784314
-x_zero_point = y_zero_point = z_zero_point = 127
+x_scale = y_scale = z_scale = 0.12
+x_zero_point = y_zero_point = z_zero_point = 2
 
 x_zp = relay.const(x_zero_point, "int32")
 y_zp = relay.const(y_zero_point, "int32")
@@ -91,16 +91,11 @@ def get_network(name, batch_size, dtype, layout):
         kernel2_shape = (512, 256)
         kernel3_shape = (256, 128)
 
-        x = relay.var("data", shape=input_shape, dtype="float32")
-        kernel1 = relay.var("kernel1", shape=kernel1_shape, dtype="float32")
-        kernel2 = relay.var("kernel2", shape=kernel2_shape, dtype="float32")
-        kernel3 = relay.var("kernel3", shape=kernel3_shape, dtype="float32")
+        x = relay.var("data", shape=input_shape, dtype=dtype)
+        kernel1 = relay.var("kernel1", shape=kernel1_shape, dtype=dtype)
+        kernel2 = relay.var("kernel2", shape=kernel2_shape, dtype=dtype)
+        kernel3 = relay.var("kernel3", shape=kernel3_shape, dtype=dtype)
 
-        if dtype=="int8":
-            x = relay.qnn.op.quantize(x, relay.const(0.078), relay.const(0), out_dtype="uint8")
-            kernel1 = relay.qnn.op.quantize(kernel1, relay.const(0.07), relay.const(0), out_dtype="int8")
-            kernel2 = relay.qnn.op.quantize(kernel2, relay.const(0.07), relay.const(0), out_dtype="int8")
-            kernel3 = relay.qnn.op.quantize(kernel3, relay.const(0.07), relay.const(0), out_dtype="int8")
         if dtype=="float32":
             out = relay.nn.matmul(x, kernel1)
             out = relay.nn.relu(out)
@@ -112,35 +107,47 @@ def get_network(name, batch_size, dtype, layout):
         else:
             out = relay.qnn.op.dense(
                 x, relay.transpose(kernel1, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel1_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel1_shape[1]).astype("float32")),
+                kernel1_shape[1],
                 out_dtype="int32"
             )
-            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
+            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel2, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel2_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel2_shape[1]).astype("float32")),
+                kernel2_shape[1],
                 out_dtype="int32"
             )
-            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
+            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel3, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel3_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel3_shape[1]).astype("float32")),
+                kernel3_shape[1],
                 out_dtype="int32"
             )
-            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
+            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             mod = tvm.IRModule.from_expr(out)
             mod = relay.transform.InferType()(mod)
             mod = relay.qnn.transform.CanonicalizeOps()(mod)
         print(mod)
         input_shapes = {"data": input_shape, "kernel1": kernel1_shape, "kernel2": kernel2_shape, "kernel3": kernel3_shape}
         param_lst = ["kernel1", "kernel2", "kernel3"]
-        params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype("float32") for x in param_lst}
+        if dtype == "float32":
+            params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype(dtype) for x in param_lst}
+        else:
+            params = {x: np.random.randint(-127, 128, input_shapes[x]).astype(dtype) for x in param_lst}
 
     elif name == "MLP2":
         import numpy as np
@@ -151,19 +158,19 @@ def get_network(name, batch_size, dtype, layout):
         kernel3_shape = (1024, 512)
         kernel4_shape = (512, 256)
         kernel5_shape = (256, 1)
-        x = relay.var("data", shape=input_shape, dtype="float32")
-        kernel1 = relay.var("kernel1", shape=kernel1_shape, dtype="float32")
-        kernel2 = relay.var("kernel2", shape=kernel2_shape, dtype="float32")
-        kernel3 = relay.var("kernel3", shape=kernel3_shape, dtype="float32")
-        kernel4 = relay.var("kernel4", shape=kernel4_shape, dtype="float32")
-        kernel5 = relay.var("kernel5", shape=kernel5_shape, dtype="float32")
-        if dtype=="int8":
-            x = relay.qnn.op.quantize(x, relay.const(0.078), relay.const(0), out_dtype="uint8")
-            kernel1 = relay.qnn.op.quantize(kernel1, relay.const(0.07), relay.const(0), out_dtype="int8")
-            kernel2 = relay.qnn.op.quantize(kernel2, relay.const(0.07), relay.const(0), out_dtype="int8")
-            kernel3 = relay.qnn.op.quantize(kernel3, relay.const(0.07), relay.const(0), out_dtype="int8")
-            kernel4 = relay.qnn.op.quantize(kernel4, relay.const(0.07), relay.const(0), out_dtype="int8")
-            kernel5 = relay.qnn.op.quantize(kernel5, relay.const(0.07), relay.const(0), out_dtype="int8")
+        x = relay.var("data", shape=input_shape, dtype=dtype)
+        kernel1 = relay.var("kernel1", shape=kernel1_shape, dtype=dtype)
+        kernel2 = relay.var("kernel2", shape=kernel2_shape, dtype=dtype)
+        kernel3 = relay.var("kernel3", shape=kernel3_shape, dtype=dtype)
+        kernel4 = relay.var("kernel4", shape=kernel4_shape, dtype=dtype)
+        kernel5 = relay.var("kernel5", shape=kernel5_shape, dtype=dtype)
+        # if dtype=="int8":
+        #     x = relay.qnn.op.quantize(x, relay.const(0.12), relay.const(2), out_dtype="uint8")
+        #     kernel1 = relay.qnn.op.quantize(kernel1, relay.const(np.ones(kernel1_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel1_shape[1],).astype("int32")), out_dtype="int8")
+        #     kernel2 = relay.qnn.op.quantize(kernel2, relay.const(np.ones(kernel2_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel2_shape[1],).astype("int32")), out_dtype="int8")
+        #     kernel3 = relay.qnn.op.quantize(kernel3, relay.const(np.ones(kernel3_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel3_shape[1],).astype("int32")), out_dtype="int8")
+        #     kernel4 = relay.qnn.op.quantize(kernel4, relay.const(np.ones(kernel4_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel4_shape[1],).astype("int32")), out_dtype="int8")
+        #     kernel5 = relay.qnn.op.quantize(kernel5, relay.const(np.ones(kernel5_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel5_shape[1],).astype("int32")), out_dtype="int8")
         if dtype=="float32":
             out = relay.nn.matmul(x, kernel1)
             out = relay.nn.relu(out)
@@ -179,39 +186,55 @@ def get_network(name, batch_size, dtype, layout):
         else:
             out = relay.qnn.op.dense(
                 x, relay.transpose(kernel1, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel1_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel1_shape[1]).astype("float32")),
+                kernel1_shape[1],
                 out_dtype="int32"
             )
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel2, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel2_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel2_shape[1]).astype("float32")),
+                kernel2_shape[1],
                 out_dtype="int32"
             )
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel3, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel3_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel3_shape[1]).astype("float32")),
+                kernel3_shape[1],
                 out_dtype="int32"
             )
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel4, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
-                None,
+                x_zp,
+                relay.const(np.zeros(kernel4_shape[1],).astype("int32")),
+                x_s,
+                relay.const(np.array([0.12]*kernel4_shape[1]).astype("float32")),
+                kernel4_shape[1],
                 out_dtype="int32"
             )
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
+
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel5, axes=[1, 0]),
-                x_zp, y_zp, x_s, y_s,
+                x_zp,
+                relay.const(0, "int32"),
+                x_s,
+                relay.const(0.12, "float32"),
                 None,
                 out_dtype="int32"
             )
@@ -224,9 +247,14 @@ def get_network(name, batch_size, dtype, layout):
         input_shapes = {"data": input_shape, "kernel1": kernel1_shape, "kernel2": kernel2_shape, "kernel3": kernel3_shape,
                         "kernel4": kernel4_shape, "kernel5": kernel5_shape}
         param_lst = ["kernel1", "kernel2", "kernel3", "kernel4", "kernel5"]
-        params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype("float32") for x in param_lst}
+        if dtype == "float32":
+            params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype(dtype) for x in param_lst}
+        else:
+            params = {x: np.random.randint(-127, 128, input_shapes[x]).astype(dtype) for x in param_lst}
     elif "MHA" in name:
         import numpy as np
+        x_zp = relay.const(0, "int32")
+        y_zp = relay.const(0, "int32")
         seq_len, total_dim, num_head = 128, 768, 8
         if name == "MHA2":
             seq_len, total_dim, num_head = 128, 768, 12
@@ -241,14 +269,14 @@ def get_network(name, batch_size, dtype, layout):
         fscore_shape = (1,)
         add_shape = (batch_size, 1, 1, seq_len)
         matmul2_kernel_shape = (batch_size * num_head, seq_len, head_dim)
-        x = relay.var("data", shape=(input_shape), dtype="float32")
-        matmul1_kernel = relay.var("matmul1_kernel", shape=(matmul1_kernel_shape), dtype="float32")
+        x = relay.var("data", shape=(input_shape), dtype=dtype)
+        matmul1_kernel = relay.var("matmul1_kernel", shape=(matmul1_kernel_shape), dtype=dtype)
         f_score_div = relay.var("f_score_div", shape=(fscore_shape), dtype="float32")
         f_score_add = relay.var("f_score_add", shape=(add_shape), dtype="float32")
-        matmul2_kernel = relay.var("matmul2_kernel", shape=(matmul2_kernel_shape), dtype="float32")
-        if dtype=="int8":
-            matmul1_kernel = relay.qnn.op.quantize(matmul1_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
-            matmul2_kernel = relay.qnn.op.quantize(matmul2_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
+        matmul2_kernel = relay.var("matmul2_kernel", shape=(matmul2_kernel_shape), dtype=dtype)
+        # if dtype=="int8":
+        #     matmul1_kernel = relay.qnn.op.quantize(matmul1_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
+        #     matmul2_kernel = relay.qnn.op.quantize(matmul2_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
         if dtype=="float32":
             x = relay.reshape(x, [batch_size *num_head, seq_len, head_dim])
             out = relay.nn.batch_matmul(x, matmul1_kernel, transpose_a=False, transpose_b=False)
@@ -263,7 +291,7 @@ def get_network(name, batch_size, dtype, layout):
             mod = tvm.IRModule.from_expr(out)
         else:
             x = relay.reshape(x, [batch_size *num_head, seq_len, head_dim])
-            x = relay.qnn.op.quantize(x, relay.const(0.078), relay.const(0), out_dtype="int8")
+            # x = relay.qnn.op.quantize(x, relay.const(0.12), relay.const(0), out_dtype="int8")
             out = relay.qnn.op.batch_matmul(x, relay.transpose(matmul1_kernel, axes=[0, 2, 1]), x_zp, y_zp, x_s, y_s)
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.qnn.op.dequantize(out, x_s, x_zp)
@@ -281,8 +309,12 @@ def get_network(name, batch_size, dtype, layout):
         print(mod)
         input_shapes = {"data": input_shape, "matmul1_kernel": matmul1_kernel_shape, "f_score_div": fscore_shape, "f_score_add": add_shape,
                         "matmul2_kernel": matmul2_kernel_shape}
-        param_lst = ["matmul1_kernel", "f_score_div", "f_score_add", "matmul2_kernel"]
-        params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype("float32") for x in param_lst}
+        param_lst = ["matmul1_kernel", "matmul2_kernel"]
+        if dtype == "float32":
+            params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype(dtype) for x in param_lst}
+        else:
+            params = {x: np.random.randint(-127, 128, input_shapes[x]).astype(dtype) for x in param_lst}
+        params["f_score_add"] = np.random.uniform(-1, 1, input_shapes["f_score_add"]).astype("float32")
         params["f_score_div"] = np.array(np.sqrt(seq_len).astype("float32"))
     else:
         raise ValueError("Unsupported network: " + name)
