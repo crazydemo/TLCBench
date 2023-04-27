@@ -23,29 +23,29 @@ network_to_n_trials = {
     ("MLP2", 128, "float32", "llvm"): 4000,
     ("MLP2", 256, "float32", "llvm"): 4000,
     ("MLP2", 512, "float32", "llvm"): 4000,
-    ("MHA1", 32, "float32", "llvm"): 2400,
-    ("MHA1", 64, "float32", "llvm"): 2400,
-    ("MHA1", 128, "float32", "llvm"): 2400,
-    ("MHA2", 32, "float32", "llvm"): 2400,
-    ("MHA2", 64, "float32", "llvm"): 2400,
-    ("MHA2", 128, "float32", "llvm"): 2400,
-    ("MHA3", 32, "float32", "llvm"): 2400,
-    ("MHA3", 64, "float32", "llvm"): 2400,
-    ("MHA3", 128, "float32", "llvm"): 2400,
-    ("MHA4", 32, "float32", "llvm"): 2400,
-    ("MHA4", 64, "float32", "llvm"): 2400,
-    ("MHA4", 128, "float32", "llvm"): 2400,
+    ("MHA1", 32, "float32", "llvm"): 4000,
+    ("MHA1", 64, "float32", "llvm"): 4000,
+    ("MHA1", 128, "float32", "llvm"): 4000,
+    ("MHA2", 32, "float32", "llvm"): 4000,
+    ("MHA2", 64, "float32", "llvm"): 4000,
+    ("MHA2", 128, "float32", "llvm"): 4000,
+    ("MHA3", 32, "float32", "llvm"): 4000,
+    ("MHA3", 64, "float32", "llvm"): 4000,
+    ("MHA3", 128, "float32", "llvm"): 4000,
+    ("MHA4", 32, "float32", "llvm"): 4000,
+    ("MHA4", 64, "float32", "llvm"): 4000,
+    ("MHA4", 128, "float32", "llvm"): 4000,
 
-    ("MLP1", 32, "int8", "llvm"): 2400,
-    ("MLP1", 64, "int8", "llvm"): 2400,
-    ("MLP1", 128, "int8", "llvm"): 2400,
-    ("MLP1", 256, "int8", "llvm"): 2400,
-    ("MLP1", 512, "int8", "llvm"): 2400,
-    ("MLP2", 32, "int8", "llvm"): 4000,
-    ("MLP2", 64, "int8", "llvm"): 4000,
-    ("MLP2", 128, "int8", "llvm"): 4000,
-    ("MLP2", 256, "int8", "llvm"): 4000,
-    ("MLP2", 512, "int8", "llvm"): 4000,
+    ("MLP1", 32, "int8", "llvm"): 4000,
+    ("MLP1", 64, "int8", "llvm"): 4000,
+    ("MLP1", 128, "int8", "llvm"): 4000,
+    ("MLP1", 256, "int8", "llvm"): 4000,
+    ("MLP1", 512, "int8", "llvm"): 4000,
+    ("MLP2", 32, "int8", "llvm"): 7000,
+    ("MLP2", 64, "int8", "llvm"): 7000,
+    ("MLP2", 128, "int8", "llvm"): 7000,
+    ("MLP2", 256, "int8", "llvm"): 7000,
+    ("MLP2", 512, "int8", "llvm"): 7000,
     ("MHA1", 32, "int8", "llvm"): 2400,
     ("MHA1", 64, "int8", "llvm"): 2400,
     ("MHA1", 128, "int8", "llvm"): 2400,
@@ -84,7 +84,7 @@ def auto_scheduler_tune(network, batch_size, dtype, target, log_file):
     if "cpu" in target.keys:
         tuning_opt = auto_scheduler.TuningOptions(
             num_measure_trials=n_trials,
-            runner=auto_scheduler.LocalRunner(repeat=10, enable_cpu_cache_flush=True),
+            runner=auto_scheduler.LocalRunner(repeat=10, enable_cpu_cache_flush=True, timeout=1000),
             measure_callbacks=[auto_scheduler.RecordToFile(log_file)],
         )
     else:
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target",
         type=str,
-        default="llvm -model=platinum-8480+ -mcpu=sapphirerapids",#"llvm -model=platinum-8124m -mcpu=skylake-avx512",
+        default="llvm -model=platinum-8358 -mcpu=icelake-server",#"llvm -model=platinum-8124m -mcpu=skylake-avx512",
         help="The compilation target.",
     )
     parser.add_argument("--dtype", type=str, default="int8", help="The data type.")
@@ -136,7 +136,7 @@ if __name__ == "__main__":
         networks = ["MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4"]
     else:
         networks = [args.network]
-    batch_sizes = [32, 64, 128, 256, 512]
+    batch_sizes = [args.batch_size]
     dtypes = [args.dtype]
 
     target = tvm.target.Target(args.target)

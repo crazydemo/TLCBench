@@ -14,11 +14,11 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
     mod, params, input_name, input_shape, output_shape = get_network(
         network, batch_size, dtype, layout
     )
-
+    '''
     if dtype == "int8":
         with relay.quantize.qconfig(calibrate_mode="global_scale", global_scale=8.0):
             mod = relay.quantize.quantize(mod, params)
-
+    '''
     assert os.path.exists(log_file), "The log file '%s' does not exist." % log_file
     print("Use log file %s" % log_file)
 
@@ -72,14 +72,14 @@ if __name__ == "__main__":
         default="MLP1",
         help="The name of the neural network.",
     )
-    parser.add_argument("--batch-size", type=int, default=1, help="The batch size")
+    parser.add_argument("--batch-size", type=int, default=32, help="The batch size")
     parser.add_argument(
         "--target",
         type=str,
-        default="llvm -model=platinum-8480+ -mcpu=sapphirerapids",
+        default="llvm -model=platinum-8358 -mcpu=icelake-server",
         help="The compilation target.",
     )
-    parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
+    parser.add_argument("--dtype", type=str, default="int8", help="The data type.")
     parser.add_argument(
         "--logdir", type=str, default="tmp_logs_layers/", help="Log file directory."
     )
@@ -87,10 +87,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.network == "all":
-        networks = ["resnet_50", "mobilenet_v2", "bert"]
+        #networks = ["resnet_50", "mobilenet_v2", "bert"]
+        networks = ["MHA1", "MHA2", "MHA3", "MHA4"]
     else:
         networks = [args.network]
-    batch_sizes = [32, 64, 128, 256, 512]
+    if args.batch_size == -1:
+        batch_sizes = [32, 64, 128, 256, 512]
+    else:
+        batch_sizes = [args.batch_size]
     dtypes = [args.dtype]
 
     target = tvm.target.Target(args.target)
@@ -98,10 +102,10 @@ if __name__ == "__main__":
     # Benchmark
     result_messages = []
     for network in networks:
-        if "MHA" in network and batch_size in [256, 512]:
-            continue
-        for batch_size in batch_sizes:
-            for dtype in dtypes:
+      for batch_size in batch_sizes:
+         if "MHA" in network and batch_size in [256, 512]:
+             continue
+         for dtype in dtypes:
                 network_key = make_network_key(network, batch_size, dtype)
                 print("Benchmark %s ..." % network_key)
 
@@ -120,6 +124,7 @@ if __name__ == "__main__":
                     "%.2f ms" % np.std(prof_res),
                 )
                 result_messages.append(message)
+                print(message)
 
     # Print result
     print("-------------------------------------------------------------")

@@ -265,23 +265,23 @@ def get_network(name, batch_size, dtype, layout):
             x = relay.reshape(x, [batch_size *num_head, seq_len, head_dim])
             x = relay.qnn.op.quantize(x, relay.const(0.078), relay.const(0), out_dtype="int8")
             out = relay.qnn.op.batch_matmul(x, relay.transpose(matmul1_kernel, axes=[0, 2, 1]), x_zp, y_zp, x_s, y_s)
-            # out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
-            # out = relay.qnn.op.dequantize(out, x_s, x_zp)
-            # out = relay.divide(out, f_score_div)
-            # out = relay.reshape(out, [batch_size, num_head, seq_len, seq_len])
-            # out = relay.add(out, f_score_add)
-            # out = relay.nn.softmax(out, axis=3)
-            # out = relay.reshape(out, [batch_size * num_head, seq_len, seq_len])
-            # out = relay.qnn.op.quantize(out, x_s, x_zp, out_dtype="int8")
-            # out = relay.qnn.op.batch_matmul(out, relay.transpose(matmul2_kernel, axes=[0, 2, 1]), x_zp, y_zp, x_s, y_s)
-            # out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
-            # out = relay.reshape(out, [batch_size, num_head, seq_len, head_dim])
-            # out = relay.transpose(out, [0, 2, 1, 3])
+            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
+            out = relay.qnn.op.dequantize(out, x_s, x_zp)
+            out = relay.divide(out, f_score_div)
+            out = relay.reshape(out, [batch_size, num_head, seq_len, seq_len])
+            out = relay.add(out, f_score_add)
+            out = relay.nn.softmax(out, axis=3)
+            out = relay.reshape(out, [batch_size * num_head, seq_len, seq_len])
+            out = relay.qnn.op.quantize(out, x_s, x_zp, out_dtype="int8")
+            out = relay.qnn.op.batch_matmul(out, relay.transpose(matmul2_kernel, axes=[0, 2, 1]), x_zp, y_zp, x_s, y_s)
+            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
+            out = relay.reshape(out, [batch_size, num_head, seq_len, head_dim])
+            out = relay.transpose(out, [0, 2, 1, 3])
             mod = tvm.IRModule.from_expr(out)
         print(mod)
-        input_shapes = {"data": input_shape, "matmul1_kernel": matmul1_kernel_shape}#, "f_score_div": fscore_shape, "f_score_add": add_shape,
-                        #  "matmul2_kernel": matmul2_kernel_shape}
-        param_lst = ["matmul1_kernel"]#, "f_score_div", "f_score_add", "matmul2_kernel"]
+        input_shapes = {"data": input_shape, "matmul1_kernel": matmul1_kernel_shape, "f_score_div": fscore_shape, "f_score_add": add_shape,
+                        "matmul2_kernel": matmul2_kernel_shape}
+        param_lst = ["matmul1_kernel", "f_score_div", "f_score_add", "matmul2_kernel"]
         params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype("float32") for x in param_lst}
         params["f_score_div"] = np.array(np.sqrt(seq_len).astype("float32"))
     else:
