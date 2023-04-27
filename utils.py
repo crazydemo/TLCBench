@@ -145,7 +145,7 @@ def get_network(name, batch_size, dtype, layout):
     elif name == "MLP2":
         import numpy as np
         input_shape = (batch_size, 479)
-        output_shape = (batch_size, 2)
+        output_shape = (batch_size, 1)
         kernel1_shape = (479, 1024)
         kernel2_shape = (1024, 1024)
         kernel3_shape = (1024, 512)
@@ -248,7 +248,7 @@ def get_network(name, batch_size, dtype, layout):
         matmul2_kernel = relay.var("matmul2_kernel", shape=(matmul2_kernel_shape), dtype="float32")
         if dtype=="int8":
             matmul1_kernel = relay.qnn.op.quantize(matmul1_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
-            # matmul2_kernel = relay.qnn.op.quantize(matmul2_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
+            matmul2_kernel = relay.qnn.op.quantize(matmul2_kernel, relay.const(0.07), relay.const(0), out_dtype="int8")
         if dtype=="float32":
             x = relay.reshape(x, [batch_size *num_head, seq_len, head_dim])
             out = relay.nn.batch_matmul(x, matmul1_kernel, transpose_a=False, transpose_b=False)
