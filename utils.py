@@ -12,6 +12,10 @@ y_s = relay.const(y_scale, "float32")
 
 
 def get_network(name, batch_size, dtype, layout):
+    x_zp = relay.const(x_zero_point, "int32")
+    y_zp = relay.const(y_zero_point, "int32")
+    x_s = relay.const(x_scale, "float32")
+    y_s = relay.const(y_scale, "float32")
     """Get the symbol definition and random weight of a network"""
     input_name = "data"
     input_shape = (batch_size, 3, 224, 224)
@@ -115,7 +119,7 @@ def get_network(name, batch_size, dtype, layout):
                 out_dtype="int32"
             )
             out = relay.nn.relu(out)
-            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
+            out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8") 
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel2, axes=[1, 0]),
                 x_zp,
@@ -127,6 +131,7 @@ def get_network(name, batch_size, dtype, layout):
             )
             out = relay.nn.relu(out)
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
+            
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel3, axes=[1, 0]),
                 x_zp,
@@ -136,7 +141,7 @@ def get_network(name, batch_size, dtype, layout):
                 kernel3_shape[1],
                 out_dtype="int32"
             )
-            out = relay.nn.relu(out)
+            out = relay.nn.relu(out)            
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             mod = tvm.IRModule.from_expr(out)
             mod = relay.transform.InferType()(mod)
@@ -228,7 +233,6 @@ def get_network(name, batch_size, dtype, layout):
             )
             out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
             out = relay.nn.relu(out)
-
             out = relay.qnn.op.dense(
                 out, relay.transpose(kernel5, axes=[1, 0]),
                 x_zp,

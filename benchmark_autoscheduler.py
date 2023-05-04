@@ -120,8 +120,8 @@ if __name__ == "__main__":
                 message = "%-18s %-12s %-19s (%s)" % (
                     network,
                     batch_size,
-                    "%.2f ms" % np.mean(prof_res),
-                    "%.2f ms" % np.std(prof_res),
+                    "%.4f ms" % np.mean(prof_res),
+                    "%.4f ms" % np.std(prof_res),
                 )
                 result_messages.append(message)
                 print(message)
