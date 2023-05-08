@@ -6,10 +6,11 @@ import numpy as np
 import tvm
 from tvm import relay, auto_scheduler
 import tvm.contrib.graph_runtime as runtime
+from tvm.contrib.debugger.debug_executor import GraphModuleDebug
 
 from utils import get_network, make_network_key
 
-def benchmark(network, batch_size, dtype, target, log_file, repeat):
+def benchmark(network, batch_size, dtype, target, log_file, repeat, profiling):
     layout = "NHWC"
     mod, params, input_name, input_shape, output_shape = get_network(
         network, batch_size, dtype, layout
@@ -52,16 +53,33 @@ def benchmark(network, batch_size, dtype, target, log_file, repeat):
                 lib = tvm.relay.build(mod, target=target, params=params)
 
         ctx = tvm.device(str(target), 0)
-        module = tvm.contrib.graph_executor.GraphModule(lib["default"](ctx))
+        if not profiling:
+            module = tvm.contrib.graph_executor.GraphModule(lib["default"](ctx))
+        else:
+            module = GraphModuleDebug(
+                lib["debug_create"]("default", ctx),
+                [ctx],
+                lib.graph_json,
+                dump_root="/home/zhangyan/tvmdbg",
+            )
+        
         # Feed input data
         data = np.random.uniform(size=input_shape)
-        module.set_input(input_name, data)
+        module.set_input(input_name, data)        
+        module.set_input(**params)
 
-    # Evaluate
-    ftimer = module.module.time_evaluator("run", ctx, min_repeat_ms=3000, repeat=repeat)
-    return np.array(ftimer().results)
+        if profiling:
+            # execute
+            for i in range(repeat):
+                module.run()
+        else:
+            # Evaluate
+            ftimer = module.module.time_evaluator("run", ctx, min_repeat_ms=3000, repeat=repeat)
 
-
+    if profiling:
+        return np.array(0)
+    else:
+        return np.array(ftimer().results)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -82,6 +100,9 @@ if __name__ == "__main__":
     parser.add_argument("--dtype", type=str, default="int8", help="The data type.")
     parser.add_argument(
         "--logdir", type=str, default="tmp_logs_layers/", help="Log file directory."
+    )
+    parser.add_argument(
+        "--profiling", type=bool, default=False, help="Whether to use profiling."
     )
     parser.add_argument("--repeat", type=int, default=3)
     args = parser.parse_args()
@@ -113,9 +134,8 @@ if __name__ == "__main__":
                     args.logdir, "autoscheduler", target.model, network_key + ".json"
                 )
                 prof_res = benchmark(
-                    network, batch_size, dtype, target, log_file, args.repeat
+                    network, batch_size, dtype, target, log_file, args.repeat, args.profiling
                 )
-
                 prof_res *= 1000  # convert to millisecond
                 message = "%-18s %-12s %-19s (%s)" % (
                     network,
@@ -136,3 +156,4 @@ if __name__ == "__main__":
     for line in result_messages:
         print(line)
     print("-------------------------------------------------------------")
+
