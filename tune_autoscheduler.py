@@ -8,11 +8,17 @@ from utils import get_network, make_network_key
 
 network_to_n_trials = {
     # CPU
-    ("resnet_50", 1, "float32", "llvm"): 22000,
-    ("resnet_50", 1, "bf16", "llvm"): 22000,
-    ("mobilenet_v2", 1, "float32", "llvm"): 16000,
-    ("bert", 1, "float32", "llvm"): 12000,
-    ("bert", 1, "bf16", "llvm"): 12000,
+    ("single_matmul", 32, "float32", "llvm"): 1000,
+    ("single_matmul", 64, "float32", "llvm"): 1000,
+    ("single_matmul", 128, "float32", "llvm"): 1000,
+    ("single_matmul", 256, "float32", "llvm"): 1000,
+    ("single_matmul", 512, "float32", "llvm"): 1000,
+    ("single_matmul", 32, "int8", "llvm"): 2000,
+    ("single_matmul", 64, "int8", "llvm"): 2000,
+    ("single_matmul", 128, "int8", "llvm"): 2000,
+    ("single_matmul", 256, "int8", "llvm"): 2000,
+    ("single_matmul", 512, "int8", "llvm"): 2000,
+
     ("MLP1", 32, "float32", "llvm"): 3000,
     ("MLP1", 64, "float32", "llvm"): 3000,
     ("MLP1", 128, "float32", "llvm"): 3000,
@@ -58,26 +64,18 @@ network_to_n_trials = {
     ("MHA4", 32, "int8", "llvm"): 3000,
     ("MHA4", 64, "int8", "llvm"): 3000,
     ("MHA4", 128, "int8", "llvm"): 3000,
-
-    # GPU
-    ("resnet_50", 1, "float32", "cuda"): 20000,
-    ("mobilenet_v2", 1, "float32", "cuda"): 16000,
-    ("bert", 1, "float32", "cuda"): 12000,
 }
 
 
-def auto_scheduler_tune(network, batch_size, dtype, target, log_file):
+def auto_scheduler_tune(network, batch_size, dtype, target, log_file, inC, outC):
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     if os.path.exists(log_file):
         os.remove(log_file)
 
     layout = "NHWC"
     mod, params, input_name, input_shape, output_shape = get_network(
-        network, batch_size, dtype, layout
+        network, batch_size, dtype, layout, inC, outC
     )
-
-    if dtype=="bf16":
-        mod = relay.transform.ToMixedPrecision("bfloat16")(mod)
 
     n_trials = network_to_n_trials[(network, batch_size, dtype, str(target.kind))]
 
@@ -115,20 +113,22 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["resnet_50", "mobilenet_v2", "bert", "MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4", "all"],
-        default="MLP1",
+        choices=["MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4", "single_matmul", "all"],
+        default="single_matmul",
         help="The name of the neural network.",
     )
     parser.add_argument("--batch-size", type=int, default=32, help="The batch size")
+    parser.add_argument("--inC", type=int, default=13, help="The batch size")
+    parser.add_argument("--outC", type=int, default=512, help="The batch size")
     parser.add_argument(
         "--target",
         type=str,
-        default="llvm -model=platinum-8358 -mcpu=icelake-server",#"llvm -model=platinum-8124m -mcpu=skylake-avx512",
+        default="llvm -model=platinum-8358 -mcpu=icelake-server",
         help="The compilation target.",
     )
-    parser.add_argument("--dtype", type=str, default="int8", help="The data type.")
+    parser.add_argument("--dtype", type=str, default="float32", help="The data type.")
     parser.add_argument(
-        "--logdir", type=str, default="tmp_logs_layers/", help="Log file directory."
+        "--logdir", type=str, default="temp_logs/", help="Log file directory."
     )
     args = parser.parse_args()
 
@@ -146,11 +146,13 @@ if __name__ == "__main__":
             if "MHA" in network and batch_size in [256, 512]:
                 continue
             for dtype in dtypes:
-                network_key = make_network_key(network, batch_size, dtype)
-                print("Tune %s ..." % network_key)
+                matmul_shapes = ((args.inC, args.outC),)
+                for inC, outC in matmul_shapes:
+                    network_key = make_network_key(network, batch_size, dtype, inC, outC)
+                    print("Tune %s ..." % network_key)
 
-                log_file = os.path.join(
-                    args.logdir, "autoscheduler", target.model, network_key + ".json"
-                )
+                    log_file = os.path.join(
+                        args.logdir, "autoscheduler", target.model, network_key + ".json"
+                    )
 
-                auto_scheduler_tune(network, batch_size, dtype, target, log_file)
+                    auto_scheduler_tune(network, batch_size, dtype, target, log_file, inC, outC)

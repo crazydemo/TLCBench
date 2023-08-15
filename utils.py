@@ -11,7 +11,7 @@ x_s = relay.const(x_scale, "float32")
 y_s = relay.const(y_scale, "float32")
 
 
-def get_network(name, batch_size, dtype, layout):
+def get_network(name, batch_size, dtype, layout, inC=13, outC=512):
     x_zp = relay.const(x_zero_point, "int32")
     y_zp = relay.const(y_zero_point, "int32")
     x_s = relay.const(x_scale, "float32")
@@ -51,10 +51,10 @@ def get_network(name, batch_size, dtype, layout):
     elif name == "bert":
         import gluonnlp
 
-        seq_length = 128
+        seq_length = 384
 
         # Instantiate a BERT classifier using GluonNLP
-        model_name = "bert_12_768_12"
+        model_name = "bert_24_1024_16"
         dataset = "book_corpus_wiki_en_uncased"
         model, _ = gluonnlp.model.get_model(
             name=model_name,
@@ -72,7 +72,6 @@ def get_network(name, batch_size, dtype, layout):
             "data2": (batch_size,),
         }
         mod, params = relay.frontend.from_mxnet(model, shape_dict)
-        print(mod)
         input_shape = (shape_dict["data0"], shape_dict["data1"], shape_dict["data2"])
 
         mod = tvm.relay.transform.FastMath()(mod)
@@ -87,6 +86,51 @@ def get_network(name, batch_size, dtype, layout):
         mod = tvm.relay.transform.FoldConstant()(mod)
         mod = tvm.relay.transform.CombineParallelBatchMatmul()(mod)
         mod = tvm.relay.transform.FoldConstant()(mod)
+    elif name == "single_matmul":
+        import numpy as np
+        input_shape = (batch_size, inC)
+        output_shape = (batch_size, outC)
+        kernel1_shape = (inC, outC)
+
+        x = relay.var("data", shape=input_shape, dtype=dtype)
+        kernel1 = relay.var("kernel", shape=kernel1_shape, dtype=dtype)
+
+        if dtype=="float32":
+            out = relay.nn.matmul(x, kernel1)
+            mod = tvm.IRModule.from_expr(out)
+        else:
+            if outC != 1:
+                out = relay.qnn.op.dense(
+                    x, relay.transpose(kernel1, axes=[1, 0]),
+                    x_zp,
+                    relay.const(np.zeros(kernel1_shape[1],).astype("int32")),
+                    x_s,
+                    relay.const(np.array([0.12]*kernel1_shape[1]).astype("float32")),
+                    kernel1_shape[1],
+                    out_dtype="int32"
+                )
+                out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8") 
+            else:
+                out = relay.qnn.op.dense(
+                    x, relay.transpose(kernel1, axes=[1, 0]),
+                    x_zp,
+                    relay.const(0, "int32"),
+                    x_s,
+                    relay.const(0.12, "float32"),
+                    None,
+                    out_dtype="int32"
+                )
+                out = relay.qnn.op.requantize(out, x_s, x_zp, y_s, y_zp, out_dtype="int8")
+            mod = tvm.IRModule.from_expr(out)
+            mod = relay.transform.InferType()(mod)
+            mod = relay.qnn.transform.CanonicalizeOps()(mod)
+        input_shapes = {"data": input_shape, "kernel": kernel1_shape}
+        param_lst = ["kernel"]
+        if dtype == "float32":
+            params = {x: np.random.uniform(-1, 1, input_shapes[x]).astype(dtype) for x in param_lst}
+        else:
+            params = {x: np.random.randint(-127, 128, input_shapes[x]).astype(dtype) for x in param_lst}
+
     elif name == "MLP1":
         import numpy as np
         input_shape = (batch_size, 13)
@@ -146,7 +190,6 @@ def get_network(name, batch_size, dtype, layout):
             mod = tvm.IRModule.from_expr(out)
             mod = relay.transform.InferType()(mod)
             mod = relay.qnn.transform.CanonicalizeOps()(mod)
-        print(mod)
         input_shapes = {"data": input_shape, "kernel1": kernel1_shape, "kernel2": kernel2_shape, "kernel3": kernel3_shape}
         param_lst = ["kernel1", "kernel2", "kernel3"]
         if dtype == "float32":
@@ -169,13 +212,6 @@ def get_network(name, batch_size, dtype, layout):
         kernel3 = relay.var("kernel3", shape=kernel3_shape, dtype=dtype)
         kernel4 = relay.var("kernel4", shape=kernel4_shape, dtype=dtype)
         kernel5 = relay.var("kernel5", shape=kernel5_shape, dtype=dtype)
-        # if dtype=="int8":
-        #     x = relay.qnn.op.quantize(x, relay.const(0.12), relay.const(2), out_dtype="uint8")
-        #     kernel1 = relay.qnn.op.quantize(kernel1, relay.const(np.ones(kernel1_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel1_shape[1],).astype("int32")), out_dtype="int8")
-        #     kernel2 = relay.qnn.op.quantize(kernel2, relay.const(np.ones(kernel2_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel2_shape[1],).astype("int32")), out_dtype="int8")
-        #     kernel3 = relay.qnn.op.quantize(kernel3, relay.const(np.ones(kernel3_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel3_shape[1],).astype("int32")), out_dtype="int8")
-        #     kernel4 = relay.qnn.op.quantize(kernel4, relay.const(np.ones(kernel4_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel4_shape[1],).astype("int32")), out_dtype="int8")
-        #     kernel5 = relay.qnn.op.quantize(kernel5, relay.const(np.ones(kernel5_shape[1],).astype("float32") * 0.12), relay.const(np.zeros(kernel5_shape[1],).astype("int32")), out_dtype="int8")
         if dtype=="float32":
             out = relay.nn.matmul(x, kernel1)
             out = relay.nn.relu(out)
@@ -247,7 +283,6 @@ def get_network(name, batch_size, dtype, layout):
             mod = tvm.IRModule.from_expr(out)
             mod = relay.transform.InferType()(mod)
             mod = relay.qnn.transform.CanonicalizeOps()(mod)
-        print(mod)
         input_shapes = {"data": input_shape, "kernel1": kernel1_shape, "kernel2": kernel2_shape, "kernel3": kernel3_shape,
                         "kernel4": kernel4_shape, "kernel5": kernel5_shape}
         param_lst = ["kernel1", "kernel2", "kernel3", "kernel4", "kernel5"]
@@ -310,7 +345,6 @@ def get_network(name, batch_size, dtype, layout):
             out = relay.reshape(out, [batch_size, num_head, seq_len, head_dim])
             out = relay.transpose(out, [0, 2, 1, 3])
             mod = tvm.IRModule.from_expr(out)
-        print(mod)
         input_shapes = {"data": input_shape, "matmul1_kernel": matmul1_kernel_shape, "f_score_div": fscore_shape, "f_score_add": add_shape,
                         "matmul2_kernel": matmul2_kernel_shape}
         param_lst = ["matmul1_kernel", "matmul2_kernel"]
@@ -326,8 +360,11 @@ def get_network(name, batch_size, dtype, layout):
     return mod, params, input_name, input_shape, output_shape
 
 
-def make_network_key(network_name, batch_size, dtype):
-    return "%s-B%s-%s" % (network_name, batch_size, dtype)
+def make_network_key(network_name, batch_size, dtype, inC, outC):
+    if network_name == "single_matmul":
+        return "%s-B%s-%s-inC%s-outC%s" % (network_name, batch_size, dtype, inC, outC)
+    else:
+        return "%s-B%s-%s" % (network_name, batch_size, dtype)
 
 
 def use_graph_tuner(network_name, batch_size, dtype, target):
