@@ -1,7 +1,7 @@
 # config TVM python env
 ```
 git clone --recursive https://github.com/apache/tvm && cd tvm    # clone tvm
-conda env create --name tvm --file conda/build-environment.yaml    # install pre-requisites
+conda create --name tvm python=3.8    # install pre-requisites
 conda activate tvm
 pip install numpy decorator attrs tornado psutil xgboost cloudpickle pytest black pylint cpplint typing_extensions
 pip install mxnet==1.8.0.post0 gluoncv    # optional
