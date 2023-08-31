@@ -113,8 +113,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--network",
         type=str,
-        choices=["MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4", "single_matmul", "all"],
-        default="single_matmul",
+        choices=["MLP1", "MLP2", "MHA1", "MHA2", "MHA3", "MHA4", "all"],
+        default="MHA4",
         help="The name of the neural network.",
     )
     parser.add_argument("--batch-size", type=int, default=32, help="The batch size")
