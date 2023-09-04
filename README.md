@@ -1,6 +1,7 @@
 # TLCBench
 
 Benchmark scripts for TVM
+[![DOI](https://zenodo.org/badge/404225651.svg)](https://zenodo.org/badge/latestdoi/404225651)
 
 ## Content
 - [Requirement](#requirement)
